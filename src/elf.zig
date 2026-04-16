@@ -61,3 +61,8 @@ pub fn writePhdr(file: std.fs.File, phoff: u64, idx: u16, phentsize: u16, ph: El
     _ = try file.pwriteAll(std.mem.asBytes(&ph), off);
 }
 
+pub const Elf64Shdr = extern struct {
+    name: u32, type: u32, flags: u64, addr: u64,
+    offset: u64, size: u64, link: u32, info: u32,
+    addralign: u64, entsize: u64,
+};

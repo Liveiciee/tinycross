@@ -1,49 +1,44 @@
 const std = @import("std");
 const elf = @import("elf.zig");
-
-pub const Object = struct {
-    path: []const u8,
-    header: elf.Elf64Hdr,
-    sections: usize,
-
-    pub fn load(allocator: std.mem.Allocator, path: []const u8)!Object {
-        const file = try std.fs.cwd().openFile(path,.{});
-        defer file.close();
-
-        const hdr = try elf.readHeader(file);
-
-        if (hdr.type != 1) return error.NotRelocatable; // ET_REL = 1
-
-        return Object{
-         .path = try allocator.dupe(u8, path),
-         .header = hdr,
-         .sections = hdr.shnum,
-        };
-    }
-
-    pub fn dump(self: Object, writer: anytype)!void {
-        try writer.print("Object: {s}\n",.{self.path});
-        try writer.print(" type: {d} (1=REL)\n",.{self.header.type});
-        try writer.print(" machine: {d} (183=AArch64)\n",.{self.header.machine});
-        try writer.print(" sections: {d}\n",.{self.sections});
-        try writer.print(" entry: 0x{x}\n",.{self.header.entry});
-    }
-};
+const elfpatch = @import("elfpatch.zig");
+const tinybin = @import("tinybin.zig");
 
 pub fn link(allocator: std.mem.Allocator, inputs: []const []const u8, output: []const u8)!void {
-    var stdout_buf: [256]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
-    const out = &stdout_writer.interface;
+    _ = allocator;
+    if (inputs.len == 0) return error.NoInput;
 
-    try out.print("tinyld linking {d} objects -> {s}\n",.{inputs.len, output});
+    const in_file = try std.fs.cwd().openFile(inputs[0],.{});
+    defer in_file.close();
 
-    for (inputs) |path| {
-        const obj = Object.load(allocator, path) catch |e| {
-            try out.print(" skip {s}: {any}\n",.{path, e});
-            continue;
-        };
-        try obj.dump(out);
-    }
-    try out.writeAll("Phase 1: dump only, no output written yet\n");
-    try out.flush();
+    const stat = try in_file.stat();
+    const buf = try std.heap.page_allocator.alloc(u8, stat.size);
+    defer std.heap.page_allocator.free(buf);
+    _ = try in_file.preadAll(buf, 0);
+
+    const out = try std.fs.cwd().createFile(output,.{.read=true,.truncate=true});
+    defer out.close();
+
+    var ehdr = elf.Elf64Hdr{};
+    ehdr.type = 2;
+    ehdr.machine = 0xB7;
+    ehdr.entry = 0x400000;
+    ehdr.phoff = 64;
+    ehdr.phnum = 2;
+    try elf.writeHeader(out, ehdr);
+
+    const phdr_size: u64 = 56;
+    const ph_phdr = elf.Elf64Phdr{.type = 6,.flags = 4,.offset = 64,.vaddr = 0x400040,.paddr = 0x400040,.filesz = phdr_size*2,.memsz = phdr_size*2,.@"align" = 8 };
+    var ph_load = elf.Elf64Phdr{.type = 1,.flags = 5,.offset = 0,.vaddr = 0x400000,.paddr = 0x400000,.filesz = 0,.memsz = 0,.@"align" = 16384 };
+
+    try elf.writePhdr(out, 64, 0, 56, ph_phdr);
+    try elf.writePhdr(out, 64, 1, 56, ph_load);
+
+    try out.pwriteAll(buf, 4096);
+
+    ph_load.filesz = stat.size + 4096;
+    ph_load.memsz = ph_load.filesz;
+    try elf.writePhdr(out, 64, 1, 56, ph_load);
+
+    try elfpatch.patch16k(out);
+    try tinybin.pack(output);
 }
