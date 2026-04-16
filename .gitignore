@@ -1,9 +1,6 @@
-.zig-cache/
+zig-cache/
 zig-out/
 *.o
-*.a
-*.so
-*.tmp
-test.elf
-.zig-cache/
-zig-out/
+a.out
+a.out.packed
+test
