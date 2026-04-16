@@ -4,3 +4,6 @@ zig-out/
 *.a
 *.so
 *.tmp
+test.elf
+.zig-cache/
+zig-out/

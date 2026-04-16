@@ -13,11 +13,16 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    // Add args module
+    const args_mod = b.addModule("args", .{
+        .root_source_file = b.path("src/args.zig"),
+    });
+    exe.root_module.addImport("args", args_mod);
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
-    
     const run_step = b.step("run", "Run tinycross");
     run_step.dependOn(&run_cmd.step);
 }
