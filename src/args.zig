@@ -14,7 +14,7 @@ pub const Args = struct {
     input:?[]const u8 = null,
     output:?[]const u8 = null,
     target:?[]const u8 = null,
-    optimize: []const u8 = "ReleaseSmall",
+    optimize:?[]const u8 = null, // <-- sekarang optional
     verbose: bool = false,
 
     pub fn parse(allocator: std.mem.Allocator)!Args {

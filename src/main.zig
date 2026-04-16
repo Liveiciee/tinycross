@@ -1,24 +1,26 @@
 const std = @import("std");
 const Args = @import("args.zig").Args;
 const Command = @import("args.zig").Command;
+const Config = @import("config.zig");
 
 pub fn main()!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    // pakai arena biar dupe di args otomatis ke-free, gak ada leak report
     var arena = std.heap.ArenaAllocator.init(gpa.allocator());
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    var cfg = try Config.load(allocator, "tinycross.toml");
+    defer cfg.deinit(allocator);
+
     const args = try Args.parse(allocator);
 
-    // Zig 0.15: writer tanpa buffer (aman di Termux, gak infinite loop)
     var stdout_writer = std.fs.File.stdout().writer(&.{});
     const stdout = &stdout_writer.interface;
 
     switch (args.command) {
-       .help => {
+    .help => {
             try stdout.writeAll(
                 \\tinycross v0.1.0
                 \\Usage: tinycross <command> [options]
@@ -39,25 +41,25 @@ pub fn main()!void {
                 \\
             );
         },
-       .build => {
+    .build => {
             try stdout.writeAll("Building...\n");
-            if (args.input) |i| {
-                try stdout.writeAll("Input: ");
-                try stdout.writeAll(i);
-                try stdout.writeAll("\n");
-            }
-            if (args.output) |o| {
-                try stdout.writeAll("Output: ");
-                try stdout.writeAll(o);
-                try stdout.writeAll("\n");
-            }
-            if (args.verbose) {
-                try stdout.writeAll("Verbose on\n");
-            }
+            const target = args.target orelse cfg.target;
+            const optimize = args.optimize orelse cfg.optimize; // sekarang aman
+            const verbose = args.verbose or cfg.verbose;
+
+            if (args.input) |i| try stdout.print("Input: {s}\n",.{i});
+            if (args.output) |o| try stdout.print("Output: {s}\n",.{o});
+            try stdout.print("Target: {s}\n",.{target});
+            try stdout.print("Optimize: {s}\n",.{optimize});
+            if (verbose) try stdout.writeAll("Verbose on\n");
         },
-       .link => try stdout.writeAll("Linking...\n"),
-       .patch => try stdout.writeAll("Patching ELF...\n"),
-       .compress => try stdout.writeAll("Compressing...\n"),
-       .unknown => try stdout.writeAll("Unknown command. Try 'help'.\n"),
+    .link => {
+            try stdout.print("Linking... entry={s} stack={d}\n",.{cfg.entry, cfg.stack_size});
+        },
+    .patch => {
+            try stdout.print("Patching ELF... align={d}\n",.{cfg.align_page});
+        },
+    .compress => try stdout.writeAll("Compressing...\n"),
+    .unknown => try stdout.writeAll("Unknown command. Try 'help'.\n"),
     }
 }

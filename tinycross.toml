@@ -1,0 +1,13 @@
+# tinycross.toml — taruh di root project
+[build]
+target = "aarch64-linux-android"
+optimize = "ReleaseSmall"
+verbose = false
+
+[link]
+# nanti dipakai tinyld
+entry = "_start"
+stack_size = 16384
+
+[patch]
+align_page = 65536 # Android 16KB page requirement
